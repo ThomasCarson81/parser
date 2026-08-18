@@ -6,6 +6,7 @@ use syntax::{Token, TokenType};
 pub struct Program {
     pub statements: Vec<Statement>,
 }
+#[derive(Debug, Clone)]
 pub enum Statement {
     Let {
         identifier: String,
@@ -31,6 +32,7 @@ pub enum Statement {
     },
     Pass,
 }
+#[derive(Debug, Clone)]
 pub enum Expression {
     Number(i64),
     Identifier(String),
@@ -103,18 +105,34 @@ fn get_tokens_from_file(file_path: &str) -> Result<Vec<Token>, ParserError> {
         .map_err(|e| ParserError::CouldNotReadFile(format!("Could not read file: {}", e)))?;
     for line in file_content.lines().into_iter() {
         let token_data: Vec<&str> = line.split(',').collect();
-        let token_type = TokenType::from_str(token_data[0])
-            .ok_or_else(|| ParserError::UnknownTokenType(token_data[0].into()))?;
-        let line_number = token_data[2].parse::<usize>().map_err(|_| {
+        let token_type = TokenType::from_str(token_data[1])
+            .ok_or_else(|| ParserError::UnknownTokenType(token_data[1].into()))?;
+        let line_number = token_data[0].parse::<usize>().map_err(|_| {
             ParserError::InvalidTokenFormat(format!("Invalid line number in token: {}", line))
         })?;
         tokens.push(Token {
             token_type: token_type,
-            lexeme: token_data[1].into(),
+            lexeme: token_data[2].into(),
             line: line_number,
         });
     }
     Ok(tokens)
+}
+
+fn consume_token(
+    tokens: &mut Peekable<Iter<Token>>,
+    expected: TokenType,
+) -> Result<Token, ParserError> {
+    let peeked_token = tokens.peek().unwrap();
+    let peeked_data = Token {
+        token_type: peeked_token.token_type,
+        lexeme: peeked_token.lexeme.clone(),
+        line: peeked_token.line,
+    };
+    if peeked_token.token_type != expected {
+        return Err(ParserError::UnexpectedToken(peeked_data));
+    }
+    Ok(peeked_data)
 }
 
 fn parse_program(tokens: &[Token]) -> Result<Program, ParserError> {
@@ -124,6 +142,7 @@ fn parse_program(tokens: &[Token]) -> Result<Program, ParserError> {
     while token_stream.peek().unwrap().token_type != TokenType::EndOfFile {
         let statement = parse_statement(&mut token_stream)?;
         statements.push(statement);
+        token_stream.next();
     }
     Ok(Program { statements })
 }
