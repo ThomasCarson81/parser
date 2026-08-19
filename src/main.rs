@@ -12,6 +12,10 @@ pub enum Statement {
         identifier: String,
         expression: Expression,
     },
+    Assignment {
+        identfier: String,
+        expression: Expression,
+    },
     If {
         condition: Expression,
         body: Vec<Statement>,
@@ -24,7 +28,7 @@ pub enum Statement {
     For {
         initialiser: Option<Box<Statement>>,
         condition: Option<Expression>,
-        increment: Option<Expression>,
+        increment: Option<Box<Statement>>,
         body: Vec<Statement>,
     },
     ExpressionStatement {
@@ -148,19 +152,22 @@ fn parse_program(tokens: &[Token]) -> Result<Program, ParserError> {
     let mut token_stream = tokens.iter().peekable();
 
     while token_stream.peek().unwrap().token_type != TokenType::EndOfFile {
-        let statement = parse_statement(&mut token_stream)?;
+        let statement = parse_statement(&mut token_stream, true)?;
         statements.push(statement);
     }
     Ok(Program { statements })
 }
 
-fn parse_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
+fn parse_statement(
+    tokens: &mut Peekable<Iter<Token>>,
+    consume_semicolon: bool,
+) -> Result<Statement, ParserError> {
     let statement = match tokens.peek().unwrap().token_type {
-        TokenType::LetTok => parse_declaration(tokens)?,
+        TokenType::LetTok => parse_declaration(tokens, consume_semicolon)?,
+        TokenType::Identifier => parse_assignment(tokens, consume_semicolon)?,
         TokenType::IfTok => parse_if_statement(tokens)?,
         TokenType::WhileTok => parse_while_statement(tokens)?,
         TokenType::ForTok => parse_for_statement(tokens)?,
-
         _ => Statement::ExpressionStatement {
             expression: parse_expression(tokens)?,
         },
@@ -168,12 +175,33 @@ fn parse_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, Pars
     Ok(statement)
 }
 
-fn parse_declaration(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
+fn parse_declaration(
+    tokens: &mut Peekable<Iter<Token>>,
+    consume_semicolon: bool,
+) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::LetTok)?;
     let ident = consume_token(tokens, TokenType::Identifier)?;
     consume_token(tokens, TokenType::Equals)?;
     let expr = parse_expression(tokens)?;
-    consume_token(tokens, TokenType::Semicolon)?;
+    if consume_semicolon {
+        consume_token(tokens, TokenType::Semicolon)?;
+    }
+    Ok(Statement::Let {
+        identifier: ident.lexeme,
+        expression: expr,
+    })
+}
+
+fn parse_assignment(
+    tokens: &mut Peekable<Iter<Token>>,
+    consume_semicolon: bool,
+) -> Result<Statement, ParserError> {
+    let ident = consume_token(tokens, TokenType::Identifier)?;
+    consume_token(tokens, TokenType::Equals)?;
+    let expr = parse_expression(tokens)?;
+    if consume_semicolon {
+        consume_token(tokens, TokenType::Semicolon)?;
+    }
     Ok(Statement::Let {
         identifier: ident.lexeme,
         expression: expr,
@@ -204,7 +232,7 @@ fn parse_for_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, 
     consume_token(tokens, TokenType::ForTok)?;
     consume_token(tokens, TokenType::LeftBracket)?;
     let init = if check_token(tokens, TokenType::LetTok) {
-        Some(Box::new(parse_declaration(tokens)?))
+        Some(Box::new(parse_declaration(tokens, false)?))
     } else {
         None
     };
@@ -216,7 +244,7 @@ fn parse_for_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, 
     };
     consume_token(tokens, TokenType::Semicolon)?;
     let increment = if !check_token(tokens, TokenType::RightBracket) {
-        Some(parse_expression(tokens)?)
+        Some(Box::new(parse_statement(tokens, false)?))
     } else {
         None
     };
@@ -246,6 +274,7 @@ fn parse_expression(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Pa
 
     Ok(expr)
 }
+
 fn parse_term(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
     let mut expr = parse_primary(tokens)?;
 
@@ -285,7 +314,7 @@ fn parse_block(tokens: &mut Peekable<Iter<Token>>) -> Result<Vec<Statement>, Par
     let mut statements = Vec::new();
 
     while !check_token(tokens, TokenType::RightSquiggly) {
-        statements.push(parse_statement(tokens)?);
+        statements.push(parse_statement(tokens, true)?);
     }
 
     consume_token(tokens, TokenType::RightSquiggly)?;
