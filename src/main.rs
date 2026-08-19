@@ -22,9 +22,9 @@ pub enum Statement {
         body: Vec<Statement>,
     },
     For {
-        initializer: Box<Statement>,
-        condition: Expression,
-        increment: Box<Statement>,
+        initialiser: Option<Box<Statement>>,
+        condition: Option<Expression>,
+        increment: Option<Expression>,
         body: Vec<Statement>,
     },
     ExpressionStatement {
@@ -183,8 +183,7 @@ fn parse_declaration(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, Pa
 fn parse_if_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::IfTok)?;
     let condition = parse_expression(tokens)?;
-    consume_token(tokens, TokenType::LeftSquiggly)?;
-    let body: Vec<Statement> = Vec::new(); // TODO: add code block parsing
+    let body: Vec<Statement> = parse_block(tokens)?;
     Ok(Statement::If {
         condition: condition,
         body: body,
@@ -192,11 +191,43 @@ fn parse_if_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, P
 }
 
 fn parse_while_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
-    Ok(Statement::Pass)
+    consume_token(tokens, TokenType::WhileTok)?;
+    let condition = parse_expression(tokens)?;
+    let body = parse_block(tokens)?;
+    Ok(Statement::While {
+        condition: condition,
+        body: body,
+    })
 }
 
 fn parse_for_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
-    Ok(Statement::Pass)
+    consume_token(tokens, TokenType::ForTok)?;
+    consume_token(tokens, TokenType::LeftBracket)?;
+    let init = if check_token(tokens, TokenType::LetTok) {
+        Some(Box::new(parse_declaration(tokens)?))
+    } else {
+        None
+    };
+    consume_token(tokens, TokenType::Semicolon)?;
+    let condition = if !check_token(tokens, TokenType::Semicolon) {
+        Some(parse_expression(tokens)?)
+    } else {
+        None
+    };
+    consume_token(tokens, TokenType::Semicolon)?;
+    let increment = if !check_token(tokens, TokenType::RightBracket) {
+        Some(parse_expression(tokens)?)
+    } else {
+        None
+    };
+    consume_token(tokens, TokenType::RightBracket)?;
+    let body = parse_block(tokens)?;
+    Ok(Statement::For {
+        initialiser: init,
+        condition,
+        increment,
+        body,
+    })
 }
 
 fn parse_expression(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
@@ -246,4 +277,18 @@ fn parse_primary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Parse
         }
         _ => Err(ParserError::ExpressionError),
     }
+}
+
+fn parse_block(tokens: &mut Peekable<Iter<Token>>) -> Result<Vec<Statement>, ParserError> {
+    consume_token(tokens, TokenType::LeftSquiggly)?;
+
+    let mut statements = Vec::new();
+
+    while !check_token(tokens, TokenType::RightSquiggly) {
+        statements.push(parse_statement(tokens)?);
+    }
+
+    consume_token(tokens, TokenType::RightSquiggly)?;
+
+    Ok(statements)
 }
