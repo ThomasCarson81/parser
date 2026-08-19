@@ -13,7 +13,7 @@ pub enum Statement {
         expression: Expression,
     },
     Assignment {
-        identfier: String,
+        identifier: String,
         expression: Expression,
     },
     If {
@@ -202,7 +202,7 @@ fn parse_assignment(
     if consume_semicolon {
         consume_token(tokens, TokenType::Semicolon)?;
     }
-    Ok(Statement::Let {
+    Ok(Statement::Assignment {
         identifier: ident.lexeme,
         expression: expr,
     })
