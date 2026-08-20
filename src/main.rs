@@ -1,7 +1,6 @@
-use serde::Serialize;
 use std::env;
 use std::fs;
-use syntax::{Token, TokenType};
+use syntax::{Token, TokenType, Program, Statement, Expression};
 
 struct TokenStream {
     tokens: Vec<Token>,
@@ -26,57 +25,6 @@ impl TokenStream {
         self.peek()
             .map_or(true, |token| token.token_type == TokenType::EndOfFile)
     }
-}
-
-#[derive(Serialize)]
-pub struct Program {
-    pub statements: Vec<Statement>,
-}
-#[derive(Debug, Clone, Serialize)]
-pub enum Statement {
-    Let {
-        identifier: String,
-        expression: Expression,
-    },
-    Assignment {
-        identifier: String,
-        expression: Expression,
-    },
-    If {
-        condition: Expression,
-        body: Vec<Statement>,
-    },
-    Else {
-        body: Vec<Statement>,
-    },
-    While {
-        condition: Expression,
-        body: Vec<Statement>,
-    },
-    For {
-        initialiser: Option<Box<Statement>>,
-        condition: Option<Expression>,
-        increment: Option<Box<Statement>>,
-        body: Vec<Statement>,
-    },
-    ExpressionStatement {
-        expression: Expression,
-    },
-    Pass,
-}
-#[derive(Debug, Clone, Serialize)]
-pub enum Expression {
-    Number(f64),
-    Identifier(String),
-    BinaryOp {
-        left: Box<Expression>,
-        operator: TokenType,
-        right: Box<Expression>,
-    },
-    UnaryOp {
-        operator: TokenType,
-        operand: Box<Expression>,
-    },
 }
 
 #[derive(Debug)]
