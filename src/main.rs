@@ -1,12 +1,14 @@
+use serde::Serialize;
 use std::env;
 use std::iter::Peekable;
 use std::slice::Iter;
 use syntax::{Token, TokenType};
 
+#[derive(Serialize)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Statement {
     Let {
         identifier: String,
@@ -38,7 +40,7 @@ pub enum Statement {
     },
     Pass,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Expression {
     Number(f64),
     Identifier(String),
