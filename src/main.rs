@@ -20,7 +20,9 @@ pub enum Statement {
         condition: Expression,
         body: Vec<Statement>,
     },
-
+    Else {
+        body: Vec<Statement>,
+    },
     While {
         condition: Expression,
         body: Vec<Statement>,
@@ -50,9 +52,9 @@ pub enum Expression {
 #[derive(Debug)]
 enum ParserError {
     UnexpectedToken(Token, TokenType),
+    UnexpectedTokenNoExpected(Token),
     UnknownTokenType(String),
     InvalidTokenFormat(String),
-    ExpressionError,
     CouldNotReadFile(String),
 }
 
@@ -83,15 +85,17 @@ fn main() {
                 ParserError::UnknownTokenType(token_type) => {
                     println!("Unknown token type: {}", token_type);
                 }
+                ParserError::UnexpectedTokenNoExpected(token_type) => {
+                    println!("Unexpected token: {}", token_type.lexeme);
+                }
                 ParserError::InvalidTokenFormat(msg) => {
                     println!("Invalid token format: {}", msg);
                 }
                 ParserError::CouldNotReadFile(msg) => {
                     println!("Could not read file: {}", msg);
-                }
-                ParserError::ExpressionError => {
-                    println!("Error parsing expression");
-                }
+                } // ParserError::ExpressionError => {
+                  //     println!("Error parsing expression");
+                  // }
             }
             return;
         }
@@ -166,6 +170,7 @@ fn parse_statement(
         TokenType::LetTok => parse_declaration(tokens, consume_semicolon)?,
         TokenType::Identifier => parse_assignment(tokens, consume_semicolon)?,
         TokenType::IfTok => parse_if_statement(tokens)?,
+        TokenType::ElseTok => parse_else_statement(tokens)?,
         TokenType::WhileTok => parse_while_statement(tokens)?,
         TokenType::ForTok => parse_for_statement(tokens)?,
         _ => Statement::ExpressionStatement {
@@ -218,6 +223,12 @@ fn parse_if_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, P
     })
 }
 
+fn parse_else_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::ElseTok)?;
+    let body = parse_block(tokens)?;
+    Ok(Statement::Else { body })
+}
+
 fn parse_while_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::WhileTok)?;
     let condition = parse_expression(tokens)?;
@@ -259,9 +270,34 @@ fn parse_for_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, 
 }
 
 fn parse_expression(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
+    Ok(parse_equality(tokens)?)
+}
+
+fn parse_equality(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
+    let mut expr = parse_comparison(tokens)?;
+
+    while check_token(tokens, TokenType::EqualTo) || check_token(tokens, TokenType::NotEqualTo) {
+        let operator = tokens.next().unwrap().clone();
+        let right = parse_comparison(tokens)?;
+
+        expr = Expression::BinaryOp {
+            left: Box::new(expr),
+            operator: operator.token_type,
+            right: Box::new(right),
+        };
+    }
+
+    Ok(expr)
+}
+
+fn parse_comparison(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
     let mut expr = parse_term(tokens)?;
 
-    while check_token(tokens, TokenType::Plus) || check_token(tokens, TokenType::Minus) {
+    while check_token(tokens, TokenType::GreaterThan)
+        || check_token(tokens, TokenType::GreaterThanOrEqualTo)
+        || check_token(tokens, TokenType::LessThan)
+        || check_token(tokens, TokenType::LessThanOrEqualTo)
+    {
         let operator = tokens.next().unwrap().clone();
         let right = parse_term(tokens)?;
 
@@ -276,9 +312,43 @@ fn parse_expression(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Pa
 }
 
 fn parse_term(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
-    let mut expr = parse_primary(tokens)?;
+    let mut expr = parse_factor(tokens)?;
+
+    while check_token(tokens, TokenType::Plus) || check_token(tokens, TokenType::Minus) {
+        let operator = tokens.next().unwrap().clone();
+        let right = parse_factor(tokens)?;
+
+        expr = Expression::BinaryOp {
+            left: Box::new(expr),
+            operator: operator.token_type,
+            right: Box::new(right),
+        };
+    }
+
+    Ok(expr)
+}
+
+fn parse_factor(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
+    let mut expr = parse_unary(tokens)?;
 
     while check_token(tokens, TokenType::Asterisk) || check_token(tokens, TokenType::Slash) {
+        let operator = tokens.next().unwrap().clone();
+        let right = parse_unary(tokens)?;
+
+        expr = Expression::BinaryOp {
+            left: Box::new(expr),
+            operator: operator.token_type,
+            right: Box::new(right),
+        };
+    }
+
+    Ok(expr)
+}
+
+fn parse_unary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
+    let mut expr = parse_primary(tokens)?;
+
+    while check_token(tokens, TokenType::Not) {
         let operator = tokens.next().unwrap().clone();
         let right = parse_primary(tokens)?;
 
@@ -293,8 +363,13 @@ fn parse_term(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserEr
 }
 
 fn parse_primary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
-    let next_token = tokens.peek().unwrap().token_type;
-    match next_token {
+    let next_token = tokens.peek().unwrap();
+    let token_data = Token {
+        token_type: next_token.token_type,
+        lexeme: next_token.lexeme.clone(),
+        line: next_token.line,
+    };
+    match next_token.token_type {
         TokenType::Number => {
             let num = consume_token(tokens, TokenType::Number)?;
             Ok(Expression::Number(str::parse(&num.lexeme).unwrap()))
@@ -304,7 +379,13 @@ fn parse_primary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Parse
 
             Ok(Expression::Identifier(ident.lexeme))
         }
-        _ => Err(ParserError::ExpressionError),
+        TokenType::LeftBracket => {
+            consume_token(tokens, TokenType::LeftBracket)?;
+            let expr = parse_expression(tokens)?;
+            consume_token(tokens, TokenType::RightBracket)?;
+            Ok(expr)
+        }
+        _ => Err(ParserError::UnexpectedTokenNoExpected(token_data)),
     }
 }
 
