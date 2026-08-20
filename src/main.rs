@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::env;
+use std::fs;
 use std::iter::Peekable;
 use std::slice::Iter;
 use syntax::{Token, TokenType};
@@ -105,7 +106,15 @@ fn main() {
         }
     };
     if args.len() == 3 {
-        // output result to file
+        let json_result = serde_json::to_string_pretty(&program);
+        match json_result {
+            Ok(json) => {
+                write_ast_to_file(&args[2], &json);
+            }
+            Err(e) => {
+                println!("Error serialising JSON: {}", e);
+            }
+        }
     } else {
         for statement in program.statements {
             println!("{:?}", statement);
@@ -131,6 +140,10 @@ fn get_tokens_from_file(file_path: &str) -> Result<Vec<Token>, ParserError> {
         });
     }
     Ok(tokens)
+}
+
+fn write_ast_to_file(file_path: &str, ast: &str) {
+    fs::write(file_path, ast).expect("Unable to write to file");
 }
 
 fn consume_token(
