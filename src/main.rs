@@ -56,6 +56,7 @@ enum ParserError {
     UnknownTokenType(String),
     InvalidTokenFormat(String),
     CouldNotReadFile(String),
+    TokenStreamEnded,
 }
 
 fn main() {
@@ -93,9 +94,10 @@ fn main() {
                 }
                 ParserError::CouldNotReadFile(msg) => {
                     println!("Could not read file: {}", msg);
-                } // ParserError::ExpressionError => {
-                  //     println!("Error parsing expression");
-                  // }
+                }
+                ParserError::TokenStreamEnded => {
+                    println!("Token stream ended unexpectedly.");
+                }
             }
             return;
         }
@@ -133,7 +135,7 @@ fn consume_token(
     tokens: &mut Peekable<Iter<Token>>,
     expected: TokenType,
 ) -> Result<Token, ParserError> {
-    let peeked_token = tokens.peek().unwrap();
+    let peeked_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
     let peeked_data = Token {
         token_type: peeked_token.token_type,
         lexeme: peeked_token.lexeme.clone(),
@@ -146,16 +148,24 @@ fn consume_token(
     Ok(peeked_data)
 }
 
-fn check_token(tokens: &mut Peekable<Iter<Token>>, expected: TokenType) -> bool {
-    let peeked_token = tokens.peek().unwrap();
-    peeked_token.token_type == expected
+fn check_token(
+    tokens: &mut Peekable<Iter<Token>>,
+    expected: TokenType,
+) -> Result<bool, ParserError> {
+    let peeked_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
+    Ok(peeked_token.token_type == expected)
 }
 
 fn parse_program(tokens: &[Token]) -> Result<Program, ParserError> {
     let mut statements: Vec<Statement> = Vec::new();
     let mut token_stream = tokens.iter().peekable();
 
-    while token_stream.peek().unwrap().token_type != TokenType::EndOfFile {
+    while token_stream
+        .peek()
+        .ok_or(ParserError::TokenStreamEnded)?
+        .token_type
+        != TokenType::EndOfFile
+    {
         let statement = parse_statement(&mut token_stream, true)?;
         statements.push(statement);
     }
@@ -166,7 +176,11 @@ fn parse_statement(
     tokens: &mut Peekable<Iter<Token>>,
     consume_semicolon: bool,
 ) -> Result<Statement, ParserError> {
-    let statement = match tokens.peek().unwrap().token_type {
+    let statement = match tokens
+        .peek()
+        .ok_or(ParserError::TokenStreamEnded)?
+        .token_type
+    {
         TokenType::LetTok => parse_declaration(tokens, consume_semicolon)?,
         TokenType::Identifier => parse_assignment(tokens, consume_semicolon)?,
         TokenType::IfTok => parse_if_statement(tokens)?,
@@ -242,19 +256,19 @@ fn parse_while_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement
 fn parse_for_statement(tokens: &mut Peekable<Iter<Token>>) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::ForTok)?;
     consume_token(tokens, TokenType::LeftBracket)?;
-    let init = if check_token(tokens, TokenType::LetTok) {
+    let init = if check_token(tokens, TokenType::LetTok)? {
         Some(Box::new(parse_declaration(tokens, false)?))
     } else {
         None
     };
     consume_token(tokens, TokenType::Semicolon)?;
-    let condition = if !check_token(tokens, TokenType::Semicolon) {
+    let condition = if !check_token(tokens, TokenType::Semicolon)? {
         Some(parse_expression(tokens)?)
     } else {
         None
     };
     consume_token(tokens, TokenType::Semicolon)?;
-    let increment = if !check_token(tokens, TokenType::RightBracket) {
+    let increment = if !check_token(tokens, TokenType::RightBracket)? {
         Some(Box::new(parse_statement(tokens, false)?))
     } else {
         None
@@ -276,8 +290,8 @@ fn parse_expression(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Pa
 fn parse_equality(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
     let mut expr = parse_comparison(tokens)?;
 
-    while check_token(tokens, TokenType::EqualTo) || check_token(tokens, TokenType::NotEqualTo) {
-        let operator = tokens.next().unwrap().clone();
+    while check_token(tokens, TokenType::EqualTo)? || check_token(tokens, TokenType::NotEqualTo)? {
+        let operator = tokens.next().ok_or(ParserError::TokenStreamEnded)?.clone();
         let right = parse_comparison(tokens)?;
 
         expr = Expression::BinaryOp {
@@ -293,12 +307,12 @@ fn parse_equality(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Pars
 fn parse_comparison(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
     let mut expr = parse_term(tokens)?;
 
-    while check_token(tokens, TokenType::GreaterThan)
-        || check_token(tokens, TokenType::GreaterThanOrEqualTo)
-        || check_token(tokens, TokenType::LessThan)
-        || check_token(tokens, TokenType::LessThanOrEqualTo)
+    while check_token(tokens, TokenType::GreaterThan)?
+        || check_token(tokens, TokenType::GreaterThanOrEqualTo)?
+        || check_token(tokens, TokenType::LessThan)?
+        || check_token(tokens, TokenType::LessThanOrEqualTo)?
     {
-        let operator = tokens.next().unwrap().clone();
+        let operator = tokens.next().ok_or(ParserError::TokenStreamEnded)?.clone();
         let right = parse_term(tokens)?;
 
         expr = Expression::BinaryOp {
@@ -314,8 +328,8 @@ fn parse_comparison(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Pa
 fn parse_term(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
     let mut expr = parse_factor(tokens)?;
 
-    while check_token(tokens, TokenType::Plus) || check_token(tokens, TokenType::Minus) {
-        let operator = tokens.next().unwrap().clone();
+    while check_token(tokens, TokenType::Plus)? || check_token(tokens, TokenType::Minus)? {
+        let operator = tokens.next().ok_or(ParserError::TokenStreamEnded)?.clone();
         let right = parse_factor(tokens)?;
 
         expr = Expression::BinaryOp {
@@ -331,8 +345,8 @@ fn parse_term(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserEr
 fn parse_factor(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
     let mut expr = parse_unary(tokens)?;
 
-    while check_token(tokens, TokenType::Asterisk) || check_token(tokens, TokenType::Slash) {
-        let operator = tokens.next().unwrap().clone();
+    while check_token(tokens, TokenType::Asterisk)? || check_token(tokens, TokenType::Slash)? {
+        let operator = tokens.next().ok_or(ParserError::TokenStreamEnded)?.clone();
         let right = parse_unary(tokens)?;
 
         expr = Expression::BinaryOp {
@@ -348,8 +362,8 @@ fn parse_factor(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Parser
 fn parse_unary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
     let mut expr = parse_primary(tokens)?;
 
-    while check_token(tokens, TokenType::Not) {
-        let operator = tokens.next().unwrap().clone();
+    while check_token(tokens, TokenType::Not)? {
+        let operator = tokens.next().ok_or(ParserError::TokenStreamEnded)?.clone();
         let right = parse_primary(tokens)?;
 
         expr = Expression::BinaryOp {
@@ -363,7 +377,7 @@ fn parse_unary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserE
 }
 
 fn parse_primary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, ParserError> {
-    let next_token = tokens.peek().unwrap();
+    let next_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
     let token_data = Token {
         token_type: next_token.token_type,
         lexeme: next_token.lexeme.clone(),
@@ -371,8 +385,12 @@ fn parse_primary(tokens: &mut Peekable<Iter<Token>>) -> Result<Expression, Parse
     };
     match next_token.token_type {
         TokenType::Number => {
-            let num = consume_token(tokens, TokenType::Number)?;
-            Ok(Expression::Number(str::parse(&num.lexeme).unwrap()))
+            let tok = consume_token(tokens, TokenType::Number)?;
+            let number = Expression::Number(
+                str::parse(&tok.lexeme)
+                    .map_err(|_| ParserError::InvalidTokenFormat(tok.lexeme.clone()))?,
+            );
+            Ok(number)
         }
         TokenType::Identifier => {
             let ident = consume_token(tokens, TokenType::Identifier)?;
@@ -394,7 +412,7 @@ fn parse_block(tokens: &mut Peekable<Iter<Token>>) -> Result<Vec<Statement>, Par
 
     let mut statements = Vec::new();
 
-    while !check_token(tokens, TokenType::RightSquiggly) {
+    while !check_token(tokens, TokenType::RightSquiggly)? {
         statements.push(parse_statement(tokens, true)?);
     }
 
