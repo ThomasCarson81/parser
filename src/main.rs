@@ -148,22 +148,25 @@ fn parse_statement(
     tokens: &mut TokenStream,
     consume_semicolon: bool,
 ) -> Result<Statement, ParserError> {
-    let statement = match tokens
+    let next_token = tokens
         .peek()
-        .ok_or(ParserError::TokenStreamEnded)?
+        .ok_or(ParserError::TokenStreamEnded)?;
+    let statement = match next_token
         .token_type
     {
-        TokenType::LetTok => parse_declaration(tokens, consume_semicolon)?,
-        TokenType::Identifier => parse_identifier_statement(tokens, consume_semicolon)?,
-        TokenType::IfTok => parse_if_statement(tokens)?,
-        TokenType::ElseTok => parse_else_statement(tokens)?,
-        TokenType::WhileTok => parse_while_statement(tokens)?,
-        TokenType::ForTok => parse_for_statement(tokens)?,
-        _ => Statement::ExpressionStatement {
-            expression: parse_expression(tokens)?,
+        TokenType::LetTok => Ok(parse_declaration(tokens, consume_semicolon)?),
+        TokenType::Identifier => Ok(parse_identifier_statement(tokens, consume_semicolon)?),
+        TokenType::IfTok => Ok(parse_if_statement(tokens)?),
+        TokenType::ElseTok => { // cannot have else tokens on their own
+            Err(ParserError::UnexpectedTokenNoExpected(next_token.clone()))
         },
+        TokenType::WhileTok => Ok(parse_while_statement(tokens)?),
+        TokenType::ForTok => Ok(parse_for_statement(tokens)?),
+        _ => Ok(Statement::ExpressionStatement {
+            expression: parse_expression(tokens)?,
+        }),
     };
-    Ok(statement)
+    statement
 }
 
 fn parse_declaration(
@@ -261,16 +264,15 @@ fn parse_if_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError
     consume_token(tokens, TokenType::IfTok)?;
     let condition = parse_expression(tokens)?;
     let body: Vec<Statement> = parse_block(tokens)?;
+    let mut else_block: Option<Vec<Statement>> = None;
+    if check_token(tokens, TokenType::ElseTok)? {
+        else_block = Some(parse_block(tokens)?);
+    }
     Ok(Statement::If {
-        condition: condition,
-        body: body,
+        condition,
+        body,
+        else_block
     })
-}
-
-fn parse_else_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
-    consume_token(tokens, TokenType::ElseTok)?;
-    let body = parse_block(tokens)?;
-    Ok(Statement::Else { body })
 }
 
 fn parse_while_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
