@@ -266,6 +266,7 @@ fn parse_if_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError
     let body: Vec<Statement> = parse_block(tokens)?;
     let mut else_block: Option<Vec<Statement>> = None;
     if check_token(tokens, TokenType::ElseTok)? {
+        consume_token(tokens, TokenType::ElseTok)?;
         else_block = Some(parse_block(tokens)?);
     }
     Ok(Statement::If {
@@ -316,7 +317,42 @@ fn parse_for_statement(tokens: &mut TokenStream) -> Result<Statement, ParserErro
 }
 
 fn parse_expression(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
-    Ok(parse_equality(tokens)?)
+    Ok(parse_logical_or(tokens)?)
+}
+
+
+fn parse_logical_or(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
+    let mut expr = parse_logical_and(tokens)?;
+
+    while check_token(tokens, TokenType::LogicalOr)? {
+        consume_token(tokens, TokenType::LogicalOr)?;
+        let right = parse_logical_and(tokens)?;
+
+        expr = Expression::BinaryOp {
+            left: Box::new(expr),
+            operator: TokenType::LogicalOr,
+            right: Box::new(right),
+        };
+    }
+
+    Ok(expr)
+}
+
+fn parse_logical_and(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
+    let mut expr = parse_equality(tokens)?;
+
+    while check_token(tokens, TokenType::LogicalAnd)? {
+        consume_token(tokens, TokenType::LogicalAnd)?;
+        let right = parse_equality(tokens)?;
+
+        expr = Expression::BinaryOp {
+            left: Box::new(expr),
+            operator: TokenType::LogicalAnd,
+            right: Box::new(right),
+        };
+    }
+
+    Ok(expr)
 }
 
 fn parse_equality(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
