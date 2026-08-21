@@ -431,6 +431,7 @@ fn parse_unary_prefix(tokens: &mut TokenStream) -> Result<Expression, ParserErro
     if check_token(tokens, TokenType::Not)?
         || check_token(tokens, TokenType::Increment)?
         || check_token(tokens, TokenType::Decrement)?
+        || check_token(tokens, TokenType::Minus)?
     {
         let operator = tokens.advance().ok_or(ParserError::TokenStreamEnded)?;
 
