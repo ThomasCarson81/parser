@@ -218,12 +218,10 @@ fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, Pars
 fn parse_return_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::Return)?;
     if check_token(tokens, TokenType::Semicolon)? {
-        println!("parsed empty return");
         return Ok(Statement::Return { value: None });
     }
     let expr = parse_expression(tokens)?;
     consume_token(tokens, TokenType::Semicolon)?;
-    println!("parsed full return");
     Ok(Statement::Return { value: Some(expr) })
 }
 
@@ -270,7 +268,6 @@ fn parse_identifier_statement(
                 lexeme: next_token.lexeme.clone(),
                 line: next_token.line,
             };
-            println!("it's where I think");
             Err(ParserError::UnexpectedTokenNoExpected(token))
         }
     }?;
@@ -282,7 +279,6 @@ fn parse_assignment(
     consume_semicolon: bool,
 ) -> Result<Statement, ParserError> {
     let ident = consume_token(tokens, TokenType::Identifier)?;
-    // consume_token(tokens, TokenType::Equals)?;
     let next_tok = tokens.advance().ok_or(ParserError::TokenStreamEnded)?;
     let op = match next_tok.token_type {
         TokenType::Equals
