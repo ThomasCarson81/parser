@@ -162,6 +162,7 @@ fn parse_statement(
         },
         TokenType::WhileTok => Ok(parse_while_statement(tokens)?),
         TokenType::ForTok => Ok(parse_for_statement(tokens)?),
+        TokenType::FnTok => Ok(parse_function_definition(tokens)?),
         _ => Ok(Statement::ExpressionStatement {
             expression: parse_expression(tokens)?,
         }),
@@ -183,6 +184,30 @@ fn parse_declaration(
     Ok(Statement::Let {
         identifier: ident.lexeme,
         expression: expr,
+    })
+}
+
+fn parse_function_definition(
+    tokens: &mut TokenStream,
+) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::FnTok)?;
+    let ident = consume_token(tokens, TokenType::Identifier)?;
+    consume_token(tokens, TokenType::LeftBracket)?;
+    let mut params : Vec<String> = Vec::new();
+    while !check_token(tokens, TokenType::RightBracket)? {
+        let param = consume_token(tokens, TokenType::Identifier)?;
+        params.push(param.lexeme);
+        if !check_token(tokens, TokenType::Comma)? {
+            break;
+        }
+        consume_token(tokens, TokenType::Comma)?;
+    }
+    consume_token(tokens, TokenType::RightBracket)?;
+    let body = parse_block(tokens)?;
+    Ok(Statement::FunctionDefinition {
+        identifier: ident.lexeme,
+        parameters: params,
+        body: body
     })
 }
 
@@ -449,13 +474,43 @@ fn parse_unary_prefix(tokens: &mut TokenStream) -> Result<Expression, ParserErro
 fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
     let mut expr = parse_primary(tokens)?;
 
-    while check_token(tokens, TokenType::Increment)? || check_token(tokens, TokenType::Decrement)? {
+    while check_token(tokens, TokenType::Increment)?
+        || check_token(tokens, TokenType::Decrement)?
+        || check_token(tokens, TokenType::LeftBracket)?
+        {
         let operator = tokens.advance().ok_or(ParserError::TokenStreamEnded)?;
 
-        expr = Expression::UnaryOp {
-            operator: operator.token_type,
-            operand: Box::new(expr),
-        };
+        match operator.token_type {
+            TokenType::Increment | TokenType::Decrement => {
+                expr = Expression::UnaryOp {
+                    operator: operator.token_type,
+                    operand: Box::new(expr),
+                };
+            }
+            TokenType::LeftBracket => {
+                let mut args: Vec<Expression> = Vec::new();
+                while !check_token(tokens, TokenType::RightBracket)? {
+                    args.push(parse_expression(tokens)?);
+                    if !check_token(tokens, TokenType::Comma)? {
+                        break;
+                    }
+                    consume_token(tokens, TokenType::Comma)?;
+                }
+                match expr {
+                    Expression::Identifier(ident) => {
+                        expr = Expression::FunctionCall { identifier: ident, arguments: args }
+                    }
+                    _ => {
+                        return Err(ParserError::InvalidTokenFormat(String::from("Function calls currently only supported by identfiers.")))
+                    }
+                }
+            }
+            _ => {
+                return Err(ParserError::UnexpectedTokenNoExpected(operator));
+            }
+        }
+
+        
     }
 
     Ok(expr)
