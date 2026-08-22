@@ -150,16 +150,19 @@ fn parse_statement(
 ) -> Result<Statement, ParserError> {
     let next_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
     let statement = match next_token.token_type {
-        TokenType::LetTok => Ok(parse_declaration(tokens, consume_semicolon)?),
+        TokenType::Let => Ok(parse_declaration(tokens, consume_semicolon)?),
         TokenType::Identifier => Ok(parse_identifier_statement(tokens, consume_semicolon)?),
-        TokenType::IfTok => Ok(parse_if_statement(tokens)?),
-        TokenType::ElseTok => {
+        TokenType::If => Ok(parse_if_statement(tokens)?),
+        TokenType::Else => {
             // cannot have else tokens on their own
             Err(ParserError::UnexpectedTokenNoExpected(next_token.clone()))
         }
-        TokenType::WhileTok => Ok(parse_while_statement(tokens)?),
-        TokenType::ForTok => Ok(parse_for_statement(tokens)?),
-        TokenType::FnTok => Ok(parse_function_definition(tokens)?),
+        TokenType::While => Ok(parse_while_statement(tokens)?),
+        TokenType::For => Ok(parse_for_statement(tokens)?),
+        TokenType::Fn => Ok(parse_function_definition(tokens)?),
+        TokenType::Return => Ok(parse_return_statement(tokens)?),
+        TokenType::Break => Ok(parse_break_statement(tokens)?),
+        TokenType::Continue => Ok(parse_continue_statement(tokens)?),
         _ => {
             let expr = Statement::ExpressionStatement {
                 expression: parse_expression(tokens)?,
@@ -177,7 +180,7 @@ fn parse_declaration(
     tokens: &mut TokenStream,
     consume_semicolon: bool,
 ) -> Result<Statement, ParserError> {
-    consume_token(tokens, TokenType::LetTok)?;
+    consume_token(tokens, TokenType::Let)?;
     let ident = consume_token(tokens, TokenType::Identifier)?;
     consume_token(tokens, TokenType::Equals)?;
     let expr = parse_expression(tokens)?;
@@ -191,7 +194,7 @@ fn parse_declaration(
 }
 
 fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
-    consume_token(tokens, TokenType::FnTok)?;
+    consume_token(tokens, TokenType::Fn)?;
     let ident = consume_token(tokens, TokenType::Identifier)?;
     consume_token(tokens, TokenType::LeftBracket)?;
     let mut params: Vec<String> = Vec::new();
@@ -210,6 +213,30 @@ fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, Pars
         parameters: params,
         body: body,
     })
+}
+
+fn parse_return_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::Return)?;
+    if check_token(tokens, TokenType::Semicolon)? {
+        println!("parsed empty return");
+        return Ok(Statement::Return { value: None });
+    }
+    let expr = parse_expression(tokens)?;
+    consume_token(tokens, TokenType::Semicolon)?;
+    println!("parsed full return");
+    Ok(Statement::Return { value: Some(expr) })
+}
+
+fn parse_break_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::Break)?;
+    consume_token(tokens, TokenType::Semicolon)?;
+    Ok(Statement::Break)
+}
+
+fn parse_continue_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::Continue)?;
+    consume_token(tokens, TokenType::Semicolon)?;
+    Ok(Statement::Continue)
 }
 
 fn parse_identifier_statement(
@@ -235,7 +262,7 @@ fn parse_identifier_statement(
             Ok(Statement::ExpressionStatement {
                 expression: expr,
             })
-         }
+        }
         // TODO: a.b, a[b]
         _ => { // any other token, eg "a 4" is invalid
             let token: Token = Token {
@@ -243,6 +270,7 @@ fn parse_identifier_statement(
                 lexeme: next_token.lexeme.clone(),
                 line: next_token.line,
             };
+            println!("it's where I think");
             Err(ParserError::UnexpectedTokenNoExpected(token))
         }
     }?;
@@ -289,12 +317,12 @@ fn parse_assignment(
 }
 
 fn parse_if_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
-    consume_token(tokens, TokenType::IfTok)?;
+    consume_token(tokens, TokenType::If)?;
     let condition = parse_expression(tokens)?;
     let body: Vec<Statement> = parse_block(tokens)?;
     let mut else_block: Option<Vec<Statement>> = None;
-    if check_token(tokens, TokenType::ElseTok)? {
-        consume_token(tokens, TokenType::ElseTok)?;
+    if check_token(tokens, TokenType::Else)? {
+        consume_token(tokens, TokenType::Else)?;
         else_block = Some(parse_block(tokens)?);
     }
     Ok(Statement::If {
@@ -305,7 +333,7 @@ fn parse_if_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError
 }
 
 fn parse_while_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
-    consume_token(tokens, TokenType::WhileTok)?;
+    consume_token(tokens, TokenType::While)?;
     let condition = parse_expression(tokens)?;
     let body = parse_block(tokens)?;
     Ok(Statement::While {
@@ -315,9 +343,9 @@ fn parse_while_statement(tokens: &mut TokenStream) -> Result<Statement, ParserEr
 }
 
 fn parse_for_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
-    consume_token(tokens, TokenType::ForTok)?;
+    consume_token(tokens, TokenType::For)?;
     consume_token(tokens, TokenType::LeftBracket)?;
-    let init = if check_token(tokens, TokenType::LetTok)? {
+    let init = if check_token(tokens, TokenType::Let)? {
         Some(Box::new(parse_declaration(tokens, false)?))
     } else {
         None
