@@ -149,7 +149,6 @@ fn parse_statement(
     consume_semicolon: bool,
 ) -> Result<Statement, ParserError> {
     let next_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
-    let line_num = next_token.line;
     let statement = match next_token.token_type {
         TokenType::LetTok => Ok(parse_declaration(tokens, consume_semicolon)?),
         TokenType::Identifier => Ok(parse_identifier_statement(tokens, consume_semicolon)?),
