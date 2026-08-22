@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use syntax::{Token, TokenType, Program, Statement, Expression};
+use syntax::{Expression, Program, Statement, Token, TokenType};
 
 struct TokenStream {
     tokens: Vec<Token>,
@@ -64,8 +64,8 @@ fn main() {
                 ParserError::UnknownTokenType(token_type) => {
                     println!("Unknown token type: {}", token_type);
                 }
-                ParserError::UnexpectedTokenNoExpected(token_type) => {
-                    println!("Unexpected token: {}", token_type.lexeme);
+                ParserError::UnexpectedTokenNoExpected(token) => {
+                    println!("Unexpected token: {} on line {}", token.lexeme, token.line);
                 }
                 ParserError::InvalidTokenFormat(msg) => {
                     println!("Invalid token format: {}", msg);
@@ -77,7 +77,7 @@ fn main() {
                     println!("Token stream ended unexpectedly.");
                 }
             }
-            return;
+            std::process::exit(1);
         }
     };
     if args.len() == 3 {
@@ -148,24 +148,28 @@ fn parse_statement(
     tokens: &mut TokenStream,
     consume_semicolon: bool,
 ) -> Result<Statement, ParserError> {
-    let next_token = tokens
-        .peek()
-        .ok_or(ParserError::TokenStreamEnded)?;
-    let statement = match next_token
-        .token_type
-    {
+    let next_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
+    let line_num = next_token.line;
+    let statement = match next_token.token_type {
         TokenType::LetTok => Ok(parse_declaration(tokens, consume_semicolon)?),
         TokenType::Identifier => Ok(parse_identifier_statement(tokens, consume_semicolon)?),
         TokenType::IfTok => Ok(parse_if_statement(tokens)?),
-        TokenType::ElseTok => { // cannot have else tokens on their own
+        TokenType::ElseTok => {
+            // cannot have else tokens on their own
             Err(ParserError::UnexpectedTokenNoExpected(next_token.clone()))
-        },
+        }
         TokenType::WhileTok => Ok(parse_while_statement(tokens)?),
         TokenType::ForTok => Ok(parse_for_statement(tokens)?),
         TokenType::FnTok => Ok(parse_function_definition(tokens)?),
-        _ => Ok(Statement::ExpressionStatement {
-            expression: parse_expression(tokens)?,
-        }),
+        _ => {
+            let expr = Statement::ExpressionStatement {
+                expression: parse_expression(tokens)?,
+            };
+            if consume_semicolon {
+                consume_token(tokens, TokenType::Semicolon)?;
+            }
+            Ok(expr)
+        }
     };
     statement
 }
@@ -187,13 +191,11 @@ fn parse_declaration(
     })
 }
 
-fn parse_function_definition(
-    tokens: &mut TokenStream,
-) -> Result<Statement, ParserError> {
+fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::FnTok)?;
     let ident = consume_token(tokens, TokenType::Identifier)?;
     consume_token(tokens, TokenType::LeftBracket)?;
-    let mut params : Vec<String> = Vec::new();
+    let mut params: Vec<String> = Vec::new();
     while !check_token(tokens, TokenType::RightBracket)? {
         let param = consume_token(tokens, TokenType::Identifier)?;
         params.push(param.lexeme);
@@ -207,7 +209,7 @@ fn parse_function_definition(
     Ok(Statement::FunctionDefinition {
         identifier: ident.lexeme,
         parameters: params,
-        body: body
+        body: body,
     })
 }
 
@@ -225,11 +227,17 @@ fn parse_identifier_statement(
             Ok(parse_assignment(tokens, consume_semicolon)?),
         TokenType::Increment // a++
         | TokenType::Decrement // a--
-         => 
+        | TokenType::LeftBracket
+         => {
+            let expr = parse_expression(tokens)?;
+            if consume_semicolon {
+                consume_token(tokens, TokenType::Semicolon)?;
+            }
             Ok(Statement::ExpressionStatement {
-                expression: parse_expression(tokens)?,
-            }),
-        // TODO: a.b, a[b], a(b)
+                expression: expr,
+            })
+         }
+        // TODO: a.b, a[b]
         _ => { // any other token, eg "a 4" is invalid
             let token: Token = Token {
                 token_type: next_token.token_type,
@@ -254,12 +262,8 @@ fn parse_assignment(
         | TokenType::PlusEquals
         | TokenType::MinusEquals
         | TokenType::AsteriskEquals
-        | TokenType::SlashEquals => {
-            Ok(next_tok)
-        }
-        _ => {
-            Err(ParserError::UnexpectedTokenNoExpected(next_tok))
-        }
+        | TokenType::SlashEquals => Ok(next_tok),
+        _ => Err(ParserError::UnexpectedTokenNoExpected(next_tok)),
     }?;
     let mut expr = parse_expression(tokens)?;
     if consume_semicolon {
@@ -271,12 +275,12 @@ fn parse_assignment(
             TokenType::MinusEquals => Ok(TokenType::Minus),
             TokenType::AsteriskEquals => Ok(TokenType::Asterisk),
             TokenType::SlashEquals => Ok(TokenType::Slash),
-            _ => Err(ParserError::UnexpectedTokenNoExpected(op.clone()))
+            _ => Err(ParserError::UnexpectedTokenNoExpected(op.clone())),
         }?;
         expr = Expression::BinaryOp {
             left: Box::new(Expression::Identifier(ident.lexeme.clone())),
             operator: new_op,
-            right: Box::new(expr)
+            right: Box::new(expr),
         }
     }
     Ok(Statement::Assignment {
@@ -297,7 +301,7 @@ fn parse_if_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError
     Ok(Statement::If {
         condition,
         body,
-        else_block
+        else_block,
     })
 }
 
@@ -344,7 +348,6 @@ fn parse_for_statement(tokens: &mut TokenStream) -> Result<Statement, ParserErro
 fn parse_expression(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
     Ok(parse_logical_or(tokens)?)
 }
-
 
 fn parse_logical_or(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
     let mut expr = parse_logical_and(tokens)?;
@@ -477,7 +480,7 @@ fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserErr
     while check_token(tokens, TokenType::Increment)?
         || check_token(tokens, TokenType::Decrement)?
         || check_token(tokens, TokenType::LeftBracket)?
-        {
+    {
         let operator = tokens.advance().ok_or(ParserError::TokenStreamEnded)?;
 
         match operator.token_type {
@@ -496,12 +499,18 @@ fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserErr
                     }
                     consume_token(tokens, TokenType::Comma)?;
                 }
+                consume_token(tokens, TokenType::RightBracket)?;
                 match expr {
                     Expression::Identifier(ident) => {
-                        expr = Expression::FunctionCall { identifier: ident, arguments: args }
+                        expr = Expression::FunctionCall {
+                            identifier: ident,
+                            arguments: args,
+                        }
                     }
                     _ => {
-                        return Err(ParserError::InvalidTokenFormat(String::from("Function calls currently only supported by identfiers.")))
+                        return Err(ParserError::InvalidTokenFormat(String::from(
+                            "Function calls currently only supported by identfiers.",
+                        )));
                     }
                 }
             }
@@ -509,8 +518,6 @@ fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserErr
                 return Err(ParserError::UnexpectedTokenNoExpected(operator));
             }
         }
-
-        
     }
 
     Ok(expr)
