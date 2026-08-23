@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use syntax::{Expression, Program, Statement, Token, TokenType};
+use syntax::{Expression, Program, Statement, Token, TokenType, Value};
 
 struct TokenStream {
     tokens: Vec<Token>,
@@ -551,11 +551,18 @@ fn parse_primary(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
     match next_token.token_type {
         TokenType::Number => {
             let tok = consume_token(tokens, TokenType::Number)?;
-            let number = Expression::Number(
-                str::parse(&tok.lexeme)
-                    .map_err(|_| ParserError::InvalidTokenFormat(tok.lexeme.clone()))?,
-            );
+            let number = Expression::Literal(Value::Number(
+                str::parse(&tok.lexeme).map_err(|_| ParserError::InvalidTokenFormat(tok.lexeme))?,
+            ));
             Ok(number)
+        }
+        TokenType::True => {
+            consume_token(tokens, TokenType::True)?;
+            Ok(Expression::Literal(Value::Bool(true)))
+        }
+        TokenType::False => {
+            consume_token(tokens, TokenType::False)?;
+            Ok(Expression::Literal(Value::Bool(false)))
         }
         TokenType::Identifier => {
             let ident = consume_token(tokens, TokenType::Identifier)?;
