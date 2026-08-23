@@ -163,6 +163,7 @@ fn parse_statement(
         TokenType::Return => Ok(parse_return_statement(tokens)?),
         TokenType::Break => Ok(parse_break_statement(tokens)?),
         TokenType::Continue => Ok(parse_continue_statement(tokens)?),
+        TokenType::Scope => Ok(parse_scope_statement(tokens)?),
         _ => {
             let expr = Statement::ExpressionStatement {
                 expression: parse_expression(tokens)?,
@@ -366,6 +367,12 @@ fn parse_for_statement(tokens: &mut TokenStream) -> Result<Statement, ParserErro
         increment,
         body,
     })
+}
+
+fn parse_scope_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::Scope)?;
+    let body = parse_block(tokens)?;
+    Ok(Statement::Scope { body })
 }
 
 fn parse_expression(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
