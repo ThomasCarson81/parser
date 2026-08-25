@@ -31,7 +31,6 @@ impl TokenStream {
 enum ParserError {
     UnexpectedToken(Token, TokenType),
     UnexpectedTokenNoExpected(Token),
-    UnknownTokenType(String),
     InvalidTokenFormat(String),
     CouldNotReadFile(String),
     TokenStreamEnded,
@@ -61,9 +60,6 @@ fn main() {
                         got.token_type, got.line, expected, got.lexeme
                     );
                 }
-                ParserError::UnknownTokenType(token_type) => {
-                    println!("Unknown token type: {}", token_type);
-                }
                 ParserError::UnexpectedTokenNoExpected(token) => {
                     println!("Unexpected token: {} on line {}", token.lexeme, token.line);
                 }
@@ -87,7 +83,8 @@ fn main() {
                 write_ast_to_file(&args[2], &json);
             }
             Err(e) => {
-                println!("Error serialising JSON: {}", e);
+                println!("Error serialising AST JSON: {}", e);
+                std::process::exit(1);
             }
         }
     } else {
@@ -98,22 +95,10 @@ fn main() {
 }
 
 fn get_tokens_from_file(file_path: &str) -> Result<Vec<Token>, ParserError> {
-    let mut tokens: Vec<Token> = Vec::new();
     let file_content = std::fs::read_to_string(&file_path)
         .map_err(|e| ParserError::CouldNotReadFile(format!("Could not read file: {}", e)))?;
-    for line in file_content.lines().into_iter() {
-        let token_data: Vec<&str> = line.split(',').collect();
-        let token_type = TokenType::from_str(token_data[1])
-            .ok_or_else(|| ParserError::UnknownTokenType(token_data[1].into()))?;
-        let line_number = token_data[0].parse::<usize>().map_err(|_| {
-            ParserError::InvalidTokenFormat(format!("Invalid line number in token: {}", line))
-        })?;
-        tokens.push(Token {
-            token_type: token_type,
-            lexeme: token_data[2].into(),
-            line: line_number,
-        });
-    }
+    let tokens = serde_json::from_str(&file_content)
+        .map_err(|e| ParserError::CouldNotReadFile(e.to_string()))?;
     Ok(tokens)
 }
 
