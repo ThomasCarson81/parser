@@ -563,6 +563,11 @@ fn parse_primary(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
             ));
             Ok(number)
         }
+        TokenType::String => {
+            let tok = consume_token(tokens, TokenType::String)?;
+            let str_lit = Expression::Literal(Value::String(tok.lexeme));
+            Ok(str_lit)
+        }
         TokenType::True => {
             consume_token(tokens, TokenType::True)?;
             Ok(Expression::Literal(Value::Bool(true)))
