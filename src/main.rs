@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use syntax::{Expression, Program, Statement, Token, TokenType, Value};
+use syntax::{Expression, Number, Program, Statement, Token, TokenType, Value};
 
 struct TokenStream {
     tokens: Vec<Token>,
@@ -543,9 +543,7 @@ fn parse_primary(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
     match next_token.token_type {
         TokenType::Number => {
             let tok = consume_token(tokens, TokenType::Number)?;
-            let number = Expression::Literal(Value::Number(
-                str::parse(&tok.lexeme).map_err(|_| ParserError::InvalidTokenFormat(tok.lexeme))?,
-            ));
+            let number = Expression::Literal(Value::Number(parse_number(&tok.lexeme)?));
             Ok(number)
         }
         TokenType::String => {
@@ -588,4 +586,18 @@ fn parse_block(tokens: &mut TokenStream) -> Result<Vec<Statement>, ParserError> 
     consume_token(tokens, TokenType::RightSquiggly)?;
 
     Ok(statements)
+}
+
+fn parse_number(num: &str) -> Result<Number, ParserError> {
+    if num.contains('.') {
+        let numba: f32 = num
+            .parse()
+            .map_err(|e| ParserError::InvalidTokenFormat(format!("{e}")))?;
+        Ok(Number::F32(numba))
+    } else {
+        let numba: i32 = num
+            .parse()
+            .map_err(|e| ParserError::InvalidTokenFormat(format!("{e}")))?;
+        Ok(Number::I32(numba))
+    }
 }
