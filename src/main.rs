@@ -632,14 +632,14 @@ fn parse_block(tokens: &mut TokenStream) -> Result<Vec<Statement>, ParserError> 
 
 fn parse_number(num: &str) -> Result<Number, ParserError> {
     if num.contains('.') {
-        let numba: f32 = num
+        let number: f64 = num
             .parse()
             .map_err(|e| ParserError::InvalidTokenFormat(format!("{e}")))?;
-        Ok(Number::F32(numba))
+        Ok(Number::FloatLiteral(number))
     } else {
-        let numba: i32 = num
+        let number: i64 = num
             .parse()
             .map_err(|e| ParserError::InvalidTokenFormat(format!("{e}")))?;
-        Ok(Number::I32(numba))
+        Ok(Number::IntegerLiteral(number))
     }
 }
