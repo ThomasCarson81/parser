@@ -1,6 +1,8 @@
 use std::env;
 use std::fs;
-use syntax::{Expression, Number, Program, Statement, Token, TokenType, Value};
+use syntax::{
+    Expression, FunctionParameter, Number, Program, Statement, Token, TokenType, Type, Value,
+};
 
 struct TokenStream {
     tokens: Vec<Token>,
@@ -167,7 +169,26 @@ fn parse_declaration(
     consume_semicolon: bool,
 ) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::Let)?;
+    let mutable = check_token(tokens, TokenType::Mut)?;
+
+    if mutable {
+        consume_token(tokens, TokenType::Mut)?;
+    }
+
     let ident = consume_token(tokens, TokenType::Identifier)?;
+
+    let mut var_type: Option<Type> = None;
+
+    if check_token(tokens, TokenType::Colon)? {
+        consume_token(tokens, TokenType::Colon)?;
+        let type_token = consume_token(tokens, TokenType::TypeName)?;
+        var_type = Some(Type::from_str(&type_token.lexeme).ok_or(
+            ParserError::InvalidTokenFormat(format!(
+                "Parser encounterd unknown type: '{}' on line {}",
+                type_token.lexeme, type_token.line
+            )),
+        )?);
+    }
     consume_token(tokens, TokenType::Equals)?;
     let expr = parse_expression(tokens)?;
     if consume_semicolon {
@@ -176,6 +197,8 @@ fn parse_declaration(
     Ok(Statement::Let {
         identifier: ident.lexeme,
         expression: expr,
+        mutable: mutable,
+        var_type: var_type,
     })
 }
 
@@ -183,21 +206,40 @@ fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, Pars
     consume_token(tokens, TokenType::Fn)?;
     let ident = consume_token(tokens, TokenType::Identifier)?;
     consume_token(tokens, TokenType::LeftBracket)?;
-    let mut params: Vec<String> = Vec::new();
+    let mut params: Vec<FunctionParameter> = Vec::new();
     while !check_token(tokens, TokenType::RightBracket)? {
         let param = consume_token(tokens, TokenType::Identifier)?;
-        params.push(param.lexeme);
+        consume_token(tokens, TokenType::Colon)?;
+        let annotation = consume_token(tokens, TokenType::TypeName)?;
+        let param_type = Type::from_str(&annotation.lexeme).ok_or(
+            ParserError::InvalidTokenFormat(format!("unknown type: {}", &annotation.lexeme)),
+        )?;
+        params.push(FunctionParameter {
+            name: param.lexeme,
+            param_type,
+        });
         if !check_token(tokens, TokenType::Comma)? {
             break;
         }
         consume_token(tokens, TokenType::Comma)?;
     }
     consume_token(tokens, TokenType::RightBracket)?;
+    let return_type: Type;
+    if check_token(tokens, TokenType::Colon)? {
+        consume_token(tokens, TokenType::Colon)?;
+        let annotation = consume_token(tokens, TokenType::TypeName)?;
+        return_type = Type::from_str(&annotation.lexeme).ok_or(ParserError::InvalidTokenFormat(
+            format!("unknown type: {}", &annotation.lexeme),
+        ))?;
+    } else {
+        return_type = Type::Unit;
+    }
     let body = parse_block(tokens)?;
     Ok(Statement::FunctionDefinition {
         identifier: ident.lexeme,
         parameters: params,
         body: body,
+        return_type: return_type,
     })
 }
 
