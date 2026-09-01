@@ -1,7 +1,9 @@
 use std::env;
 use std::fs;
 use syntax::{
-    Expression, FunctionParameter, Number, Program, Statement, Token, TokenType, Type, Value,
+    ast::{Expression, Program, Statement, Token, TokenType},
+    functions::FunctionParameter,
+    types::{Number, Type, Value},
 };
 
 struct TokenStream {
@@ -559,7 +561,7 @@ fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserErr
                 consume_token(tokens, TokenType::RightBracket)?;
                 match expr {
                     Expression::Identifier(ident) => {
-                        expr = Expression::FunctionCall {
+                        expr = Expression::UnresolvedFunctionCall {
                             identifier: ident,
                             arguments: args,
                         }
