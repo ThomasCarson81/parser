@@ -334,6 +334,7 @@ fn parse_assignment(
             left: Box::new(Expression::Identifier(ident.lexeme.clone())),
             operator: new_op,
             right: Box::new(expr),
+            inferred_type: None,
         }
     }
     Ok(Statement::Assignment {
@@ -419,6 +420,7 @@ fn parse_logical_or(tokens: &mut TokenStream) -> Result<Expression, ParserError>
             left: Box::new(expr),
             operator: TokenType::LogicalOr,
             right: Box::new(right),
+            inferred_type: None,
         };
     }
 
@@ -436,6 +438,7 @@ fn parse_logical_and(tokens: &mut TokenStream) -> Result<Expression, ParserError
             left: Box::new(expr),
             operator: TokenType::LogicalAnd,
             right: Box::new(right),
+            inferred_type: None,
         };
     }
 
@@ -453,6 +456,7 @@ fn parse_equality(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
             left: Box::new(expr),
             operator: operator.token_type,
             right: Box::new(right),
+            inferred_type: None,
         };
     }
 
@@ -474,6 +478,7 @@ fn parse_comparison(tokens: &mut TokenStream) -> Result<Expression, ParserError>
             left: Box::new(expr),
             operator: operator.token_type,
             right: Box::new(right),
+            inferred_type: None,
         };
     }
 
@@ -491,6 +496,7 @@ fn parse_term(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
             left: Box::new(expr),
             operator: operator.token_type,
             right: Box::new(right),
+            inferred_type: None,
         };
     }
 
@@ -508,6 +514,7 @@ fn parse_factor(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
             left: Box::new(expr),
             operator: operator.token_type,
             right: Box::new(right),
+            inferred_type: None,
         };
     }
 
@@ -527,6 +534,7 @@ fn parse_unary_prefix(tokens: &mut TokenStream) -> Result<Expression, ParserErro
         return Ok(Expression::UnaryOp {
             operator: operator.token_type,
             operand: Box::new(operand),
+            inferred_type: None,
         });
     }
 
@@ -547,6 +555,7 @@ fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserErr
                 expr = Expression::UnaryOp {
                     operator: operator.token_type,
                     operand: Box::new(expr),
+                    inferred_type: None,
                 };
             }
             TokenType::LeftBracket => {
