@@ -248,6 +248,7 @@ fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, Pars
 fn parse_return_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::Return)?;
     if check_token(tokens, TokenType::Semicolon)? {
+        consume_token(tokens, TokenType::Semicolon)?;
         return Ok(Statement::Return { value: None });
     }
     let expr = parse_expression(tokens)?;
@@ -349,14 +350,25 @@ fn parse_if_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError
     let body: Vec<Statement> = parse_block(tokens)?;
     let mut else_block: Option<Vec<Statement>> = None;
     if check_token(tokens, TokenType::Else)? {
-        consume_token(tokens, TokenType::Else)?;
-        else_block = Some(parse_block(tokens)?);
+        else_block = Some(parse_else_statement(tokens)?);
     }
     Ok(Statement::If {
         condition,
         body,
         else_block,
     })
+}
+
+fn parse_else_statement(tokens: &mut TokenStream) -> Result<Vec<Statement>, ParserError> {
+    consume_token(tokens, TokenType::Else)?;
+    // let body = parse_block(tokens)?;
+    let mut body = Vec::new();
+    if check_token(tokens, TokenType::If)? {
+        body.push(parse_if_statement(tokens)?);
+    } else {
+        body.extend(parse_block(tokens)?);
+    }
+    Ok(body)
 }
 
 fn parse_while_statement(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
