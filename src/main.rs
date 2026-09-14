@@ -283,6 +283,7 @@ fn parse_identifier_statement(
         TokenType::Increment // a++
         | TokenType::Decrement // a--
         | TokenType::LeftBracket
+        | TokenType::Walrus
          => {
             let expr = parse_expression(tokens)?;
             if consume_semicolon {
@@ -418,7 +419,34 @@ fn parse_scope_statement(tokens: &mut TokenStream) -> Result<Statement, ParserEr
 }
 
 fn parse_expression(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
-    Ok(parse_logical_or(tokens)?)
+    Ok(parse_walrus(tokens)?)
+}
+
+fn parse_walrus(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
+    let mut expr = parse_logical_or(tokens)?;
+
+    while check_token(tokens, TokenType::Walrus)? {
+        consume_token(tokens, TokenType::Walrus)?;
+        let right = parse_logical_or(tokens)?;
+
+        match &expr {
+            Expression::Identifier(_) => {
+                expr = Expression::BinaryOp {
+                    left: Box::new(expr),
+                    operator: TokenType::Walrus,
+                    right: Box::new(right),
+                    inferred_type: None,
+                }
+            }
+            _ => {
+                return Err(ParserError::InvalidTokenFormat(String::from(
+                    "Walrus currently only supported by identfiers.",
+                )));
+            }
+        }
+    }
+
+    Ok(expr)
 }
 
 fn parse_logical_or(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
@@ -543,11 +571,20 @@ fn parse_unary_prefix(tokens: &mut TokenStream) -> Result<Expression, ParserErro
 
         let operand = parse_unary_prefix(tokens)?;
 
-        return Ok(Expression::UnaryOp {
-            operator: operator.token_type,
-            operand: Box::new(operand),
-            inferred_type: None,
-        });
+        match &operand {
+            Expression::Identifier(_) => {
+                return Ok(Expression::UnaryOp {
+                    operator: operator.token_type,
+                    operand: Box::new(operand),
+                    inferred_type: None,
+                });
+            }
+            _ => {
+                return Err(ParserError::InvalidTokenFormat(String::from(
+                    "Increment and decrement currently only supported by identfiers.",
+                )));
+            }
+        };
     }
 
     parse_unary_postfix(tokens)
@@ -563,13 +600,20 @@ fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserErr
         let operator = tokens.advance().ok_or(ParserError::TokenStreamEnded)?;
 
         match operator.token_type {
-            TokenType::Increment | TokenType::Decrement => {
-                expr = Expression::UnaryOp {
-                    operator: operator.token_type,
-                    operand: Box::new(expr),
-                    inferred_type: None,
-                };
-            }
+            TokenType::Increment | TokenType::Decrement => match &expr {
+                Expression::Identifier(_) => {
+                    expr = Expression::UnaryOp {
+                        operator: operator.token_type,
+                        operand: Box::new(expr),
+                        inferred_type: None,
+                    }
+                }
+                _ => {
+                    return Err(ParserError::InvalidTokenFormat(String::from(
+                        "Increment and decrement currently only supported by identfiers.",
+                    )));
+                }
+            },
             TokenType::LeftBracket => {
                 let mut args: Vec<Expression> = Vec::new();
                 while !check_token(tokens, TokenType::RightBracket)? {
