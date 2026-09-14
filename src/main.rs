@@ -278,7 +278,8 @@ fn parse_identifier_statement(
         | TokenType::PlusEquals // a += b
         | TokenType::MinusEquals // a-= b
         | TokenType::AsteriskEquals // a *= b
-        | TokenType::SlashEquals => // a /= b
+        | TokenType::SlashEquals // a /= b
+        | TokenType::ModuloEquals => // a %= b
             Ok(parse_assignment(tokens, consume_semicolon)?),
         TokenType::Increment // a++
         | TokenType::Decrement // a--
@@ -317,7 +318,8 @@ fn parse_assignment(
         | TokenType::PlusEquals
         | TokenType::MinusEquals
         | TokenType::AsteriskEquals
-        | TokenType::SlashEquals => Ok(next_tok),
+        | TokenType::SlashEquals
+        | TokenType::ModuloEquals => Ok(next_tok),
         _ => Err(ParserError::UnexpectedTokenNoExpected(next_tok)),
     }?;
     let mut expr = parse_expression(tokens)?;
@@ -325,11 +327,14 @@ fn parse_assignment(
         consume_token(tokens, TokenType::Semicolon)?;
     }
     if op.token_type != TokenType::Equals {
+        // unfold shorthand operators into assigment expressions
+        // eg a += b => a = a + b
         let new_op = match op.token_type {
             TokenType::PlusEquals => Ok(TokenType::Plus),
             TokenType::MinusEquals => Ok(TokenType::Minus),
             TokenType::AsteriskEquals => Ok(TokenType::Asterisk),
             TokenType::SlashEquals => Ok(TokenType::Slash),
+            TokenType::ModuloEquals => Ok(TokenType::Modulo),
             _ => Err(ParserError::UnexpectedTokenNoExpected(op.clone())),
         }?;
         expr = Expression::BinaryOp {
@@ -546,7 +551,10 @@ fn parse_term(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
 fn parse_factor(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
     let mut expr = parse_unary_prefix(tokens)?;
 
-    while check_token(tokens, TokenType::Asterisk)? || check_token(tokens, TokenType::Slash)? {
+    while check_token(tokens, TokenType::Asterisk)?
+        || check_token(tokens, TokenType::Slash)?
+        || check_token(tokens, TokenType::Modulo)?
+    {
         let operator = tokens.advance().ok_or(ParserError::TokenStreamEnded)?;
         let right = parse_unary_prefix(tokens)?;
 
