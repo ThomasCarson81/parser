@@ -74,7 +74,7 @@ fn main() {
                     println!("Could not read file: {}", msg);
                 }
                 ParserError::TokenStreamEnded => {
-                    println!("Token stream ended unexpectedly.");
+                    println!("Token stream ended unexpectedly. (parsing)");
                 }
             }
             std::process::exit(1);
