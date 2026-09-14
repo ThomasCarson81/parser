@@ -571,8 +571,11 @@ fn parse_unary_prefix(tokens: &mut TokenStream) -> Result<Expression, ParserErro
 
         let operand = parse_unary_prefix(tokens)?;
 
-        match &operand {
-            Expression::Identifier(_) => {
+        match (&operator.token_type, &operand) {
+            (TokenType::Increment, Expression::Identifier(_))
+            | (TokenType::Decrement, Expression::Identifier(_))
+            | (TokenType::Minus, _)
+            | (TokenType::Not, _) => {
                 return Ok(Expression::UnaryOp {
                     operator: operator.token_type,
                     operand: Box::new(operand),
@@ -580,8 +583,9 @@ fn parse_unary_prefix(tokens: &mut TokenStream) -> Result<Expression, ParserErro
                 });
             }
             _ => {
-                return Err(ParserError::InvalidTokenFormat(String::from(
-                    "Increment and decrement currently only supported by identfiers.",
+                return Err(ParserError::InvalidTokenFormat(format!(
+                    "Increment and decrement currently only supported by identfiers. {:?}, line {}",
+                    operator, operator.line
                 )));
             }
         };
