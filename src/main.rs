@@ -1,8 +1,9 @@
 use std::env;
 use std::fs;
 use syntax::{
-    ast::{Expression, Program, Statement, Token, TokenType},
+    ast::{Expression, Program, Statement},
     functions::FunctionParameter,
+    tokens::{Token, TokenType},
     types::{Number, Type, Value},
 };
 
