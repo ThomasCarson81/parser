@@ -184,13 +184,7 @@ fn parse_declaration(
 
     if check_token(tokens, TokenType::Colon)? {
         consume_token(tokens, TokenType::Colon)?;
-        let type_token = consume_token(tokens, TokenType::TypeName)?;
-        var_type = Some(Type::from_str(&type_token.lexeme).ok_or(
-            ParserError::InvalidTokenFormat(format!(
-                "Parser encounterd unknown type: '{}' on line {}",
-                type_token.lexeme, type_token.line
-            )),
-        )?);
+        var_type = Some(parse_type(tokens)?);
     }
     consume_token(tokens, TokenType::Equals)?;
     let expr = parse_expression(tokens)?;
@@ -213,10 +207,7 @@ fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, Pars
     while !check_token(tokens, TokenType::RightBracket)? {
         let param = consume_token(tokens, TokenType::Identifier)?;
         consume_token(tokens, TokenType::Colon)?;
-        let annotation = consume_token(tokens, TokenType::TypeName)?;
-        let param_type = Type::from_str(&annotation.lexeme).ok_or(
-            ParserError::InvalidTokenFormat(format!("unknown type: {}", &annotation.lexeme)),
-        )?;
+        let param_type = parse_type(tokens)?;
         params.push(FunctionParameter {
             name: param.lexeme,
             param_type,
@@ -230,10 +221,7 @@ fn parse_function_definition(tokens: &mut TokenStream) -> Result<Statement, Pars
     let return_type: Type;
     if check_token(tokens, TokenType::Colon)? {
         consume_token(tokens, TokenType::Colon)?;
-        let annotation = consume_token(tokens, TokenType::TypeName)?;
-        return_type = Type::from_str(&annotation.lexeme).ok_or(ParserError::InvalidTokenFormat(
-            format!("unknown type: {}", &annotation.lexeme),
-        ))?;
+        return_type = parse_type(tokens)?;
     } else {
         return_type = Type::Unit;
     }
@@ -721,5 +709,49 @@ fn parse_number(num: &str) -> Result<Number, ParserError> {
             .parse()
             .map_err(|e| ParserError::InvalidTokenFormat(format!("{e}")))?;
         Ok(Number::IntegerLiteral(number))
+    }
+}
+
+fn parse_type(tokens: &mut TokenStream) -> Result<Type, ParserError> {
+    let next_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
+    match next_token.token_type {
+        TokenType::Identifier => {
+            // named type
+            let ident = consume_token(tokens, TokenType::Identifier)?;
+            let mut args = Vec::new();
+            if check_token(tokens, TokenType::LessThan)? {
+                consume_token(tokens, TokenType::LessThan)?;
+                while !check_token(tokens, TokenType::GreaterThan)? {
+                    args.push(parse_type(tokens)?);
+                    if !check_token(tokens, TokenType::Comma)? {
+                        break;
+                    }
+                    consume_token(tokens, TokenType::Comma)?;
+                }
+                consume_token(tokens, TokenType::GreaterThan)?;
+            }
+            Ok(Type::Named {
+                name: ident.lexeme,
+                arguments: args,
+            })
+        }
+        TokenType::LeftBracket => {
+            // tuple type
+            consume_token(tokens, TokenType::LeftBracket)?;
+            let mut args = Vec::new();
+            while !check_token(tokens, TokenType::RightBracket)? {
+                args.push(parse_type(tokens)?);
+                if !check_token(tokens, TokenType::Comma)? {
+                    break;
+                }
+                consume_token(tokens, TokenType::Comma)?;
+            }
+            consume_token(tokens, TokenType::RightBracket)?;
+            Ok(Type::Tuple(args))
+        }
+        _ => Err(ParserError::InvalidTokenFormat(format!(
+            "Invalid type format on line {}",
+            next_token.line
+        ))),
     }
 }
