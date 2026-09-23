@@ -1,5 +1,10 @@
 use std::env;
 use std::fs;
+use syntax::types::StructDefinition;
+use syntax::types::StructField;
+use syntax::types::TypeDefinition;
+use syntax::types::TypeDefinitionKind;
+use syntax::types::TypeId;
 use syntax::{
     ast::{Expression, Program, Statement},
     functions::FunctionParameter,
@@ -154,6 +159,8 @@ fn parse_statement(
         TokenType::Break => Ok(parse_break_statement(tokens)?),
         TokenType::Continue => Ok(parse_continue_statement(tokens)?),
         TokenType::Scope => Ok(parse_scope_statement(tokens)?),
+        TokenType::Struct => Ok(parse_struct_definition(tokens)?),
+        // TokenType::Enum => Ok(parse_enum_definition(tokens)?),
         _ => {
             let expr = Statement::ExpressionStatement {
                 expression: parse_expression(tokens)?,
@@ -410,6 +417,32 @@ fn parse_scope_statement(tokens: &mut TokenStream) -> Result<Statement, ParserEr
     consume_token(tokens, TokenType::Scope)?;
     let body = parse_block(tokens)?;
     Ok(Statement::Scope { body })
+}
+
+fn parse_struct_definition(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::Struct)?;
+    let ident = consume_token(tokens, TokenType::Identifier)?;
+    // let body = parse_block(tokens)?;
+    consume_token(tokens, TokenType::LeftSquiggly)?;
+    let mut fields: Vec<StructField> = Vec::new();
+    while !check_token(tokens, TokenType::RightSquiggly)? {
+        let field_name = consume_token(tokens, TokenType::Identifier)?;
+        consume_token(tokens, TokenType::Colon)?;
+        let field_type = parse_type(tokens)?;
+        consume_token(tokens, TokenType::Comma)?;
+        fields.push(StructField {
+            name: field_name.lexeme,
+            field_type,
+        });
+    }
+    consume_token(tokens, TokenType::RightSquiggly)?;
+
+    Ok(Statement::TypeDefinition(TypeDefinition {
+        id: TypeId(0),
+        name: ident.lexeme,
+        parameters: Vec::new(),
+        kind: TypeDefinitionKind::Struct(StructDefinition { fields }),
+    }))
 }
 
 fn parse_expression(tokens: &mut TokenStream) -> Result<Expression, ParserError> {
