@@ -1,15 +1,13 @@
 use std::env;
 use std::fs;
-use syntax::types::StructDefinition;
-use syntax::types::StructField;
-use syntax::types::TypeDefinition;
-use syntax::types::TypeDefinitionKind;
-use syntax::types::TypeId;
 use syntax::{
     ast::{Expression, Program, Statement},
     functions::FunctionParameter,
     tokens::{Token, TokenType},
-    types::{Number, Type, Value},
+    types::{
+        EnumDefinition, EnumVariant, EnumVariantFields, Number, StructDefinition, StructField,
+        Type, TypeDefinition, TypeDefinitionKind, TypeId, Value,
+    },
 };
 
 struct TokenStream {
@@ -160,7 +158,7 @@ fn parse_statement(
         TokenType::Continue => Ok(parse_continue_statement(tokens)?),
         TokenType::Scope => Ok(parse_scope_statement(tokens)?),
         TokenType::Struct => Ok(parse_struct_definition(tokens)?),
-        // TokenType::Enum => Ok(parse_enum_definition(tokens)?),
+        TokenType::Enum => Ok(parse_enum_definition(tokens)?),
         _ => {
             let expr = Statement::ExpressionStatement {
                 expression: parse_expression(tokens)?,
@@ -419,9 +417,7 @@ fn parse_scope_statement(tokens: &mut TokenStream) -> Result<Statement, ParserEr
     Ok(Statement::Scope { body })
 }
 
-fn parse_struct_definition(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
-    consume_token(tokens, TokenType::Struct)?;
-    let ident = consume_token(tokens, TokenType::Identifier)?;
+fn parse_generic_parameters(tokens: &mut TokenStream) -> Result<Vec<String>, ParserError> {
     let mut generic_param_names = Vec::new();
     if check_token(tokens, TokenType::LessThan)? {
         consume_token(tokens, TokenType::LessThan)?;
@@ -434,6 +430,10 @@ fn parse_struct_definition(tokens: &mut TokenStream) -> Result<Statement, Parser
         }
         consume_token(tokens, TokenType::GreaterThan)?;
     }
+    Ok(generic_param_names)
+}
+
+fn parse_struct_fields(tokens: &mut TokenStream) -> Result<Vec<StructField>, ParserError> {
     consume_token(tokens, TokenType::LeftSquiggly)?;
     let mut fields: Vec<StructField> = Vec::new();
     while !check_token(tokens, TokenType::RightSquiggly)? {
@@ -447,12 +447,70 @@ fn parse_struct_definition(tokens: &mut TokenStream) -> Result<Statement, Parser
         });
     }
     consume_token(tokens, TokenType::RightSquiggly)?;
+    Ok(fields)
+}
 
+fn parse_struct_definition(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::Struct)?;
+    let ident = consume_token(tokens, TokenType::Identifier)?;
+    let generic_param_names = parse_generic_parameters(tokens)?;
+    let fields = parse_struct_fields(tokens)?;
     Ok(Statement::TypeDefinition(TypeDefinition {
         id: TypeId(0),
         name: ident.lexeme,
         parameters: generic_param_names,
         kind: TypeDefinitionKind::Struct(StructDefinition { fields }),
+    }))
+}
+
+fn parse_enum_definition(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
+    consume_token(tokens, TokenType::Enum)?;
+    let ident = consume_token(tokens, TokenType::Identifier)?;
+    let generic_param_names = parse_generic_parameters(tokens)?;
+
+    consume_token(tokens, TokenType::LeftSquiggly)?;
+    let mut variants: Vec<EnumVariant> = Vec::new();
+    while !check_token(tokens, TokenType::RightSquiggly)? {
+        let variant_name = consume_token(tokens, TokenType::Identifier)?.lexeme;
+        if check_token(tokens, TokenType::LeftBracket)? {
+            let mut types = Vec::new();
+            consume_token(tokens, TokenType::LeftBracket)?;
+            while !check_token(tokens, TokenType::RightBracket)? {
+                let field_type = parse_type(tokens)?;
+                types.push(field_type);
+                if !check_token(tokens, TokenType::Comma)? {
+                    break;
+                }
+                consume_token(tokens, TokenType::Comma)?;
+            }
+            consume_token(tokens, TokenType::RightBracket)?;
+            variants.push(EnumVariant {
+                name: variant_name,
+                fields: EnumVariantFields::Tuple(types),
+            });
+        } else if check_token(tokens, TokenType::LeftSquiggly)? {
+            let fields = parse_struct_fields(tokens)?;
+            variants.push(EnumVariant {
+                name: variant_name,
+                fields: EnumVariantFields::Struct(fields),
+            });
+        } else {
+            variants.push(EnumVariant {
+                name: variant_name,
+                fields: EnumVariantFields::Unit,
+            });
+        }
+        consume_token(tokens, TokenType::Comma)?;
+    }
+    consume_token(tokens, TokenType::RightSquiggly)?;
+
+    let enum_def = EnumDefinition { variants };
+
+    Ok(Statement::TypeDefinition(TypeDefinition {
+        id: TypeId(0),
+        name: ident.lexeme,
+        parameters: generic_param_names,
+        kind: TypeDefinitionKind::Enum(enum_def),
     }))
 }
 
