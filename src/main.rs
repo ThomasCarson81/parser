@@ -422,7 +422,18 @@ fn parse_scope_statement(tokens: &mut TokenStream) -> Result<Statement, ParserEr
 fn parse_struct_definition(tokens: &mut TokenStream) -> Result<Statement, ParserError> {
     consume_token(tokens, TokenType::Struct)?;
     let ident = consume_token(tokens, TokenType::Identifier)?;
-    // let body = parse_block(tokens)?;
+    let mut generic_param_names = Vec::new();
+    if check_token(tokens, TokenType::LessThan)? {
+        consume_token(tokens, TokenType::LessThan)?;
+        while !check_token(tokens, TokenType::GreaterThan)? {
+            generic_param_names.push(consume_token(tokens, TokenType::Identifier)?.lexeme);
+            if !check_token(tokens, TokenType::Comma)? {
+                break;
+            }
+            consume_token(tokens, TokenType::Comma)?;
+        }
+        consume_token(tokens, TokenType::GreaterThan)?;
+    }
     consume_token(tokens, TokenType::LeftSquiggly)?;
     let mut fields: Vec<StructField> = Vec::new();
     while !check_token(tokens, TokenType::RightSquiggly)? {
@@ -440,7 +451,7 @@ fn parse_struct_definition(tokens: &mut TokenStream) -> Result<Statement, Parser
     Ok(Statement::TypeDefinition(TypeDefinition {
         id: TypeId(0),
         name: ident.lexeme,
-        parameters: Vec::new(),
+        parameters: generic_param_names,
         kind: TypeDefinitionKind::Struct(StructDefinition { fields }),
     }))
 }
