@@ -279,6 +279,7 @@ fn parse_identifier_statement(
         | TokenType::Decrement // a--
         | TokenType::LeftBracket
         | TokenType::Walrus
+        | TokenType::Dot
          => {
             let expr = parse_expression(tokens)?;
             if consume_semicolon {
@@ -738,6 +739,22 @@ fn parse_unary_postfix(tokens: &mut TokenStream) -> Result<Expression, ParserErr
                         return Err(ParserError::InvalidTokenFormat(String::from(
                             "Function calls currently only supported by identfiers.",
                         )));
+                    }
+                }
+            }
+            TokenType::Dot => {
+                let next_token = tokens.peek().ok_or(ParserError::TokenStreamEnded)?;
+                match next_token.token_type {
+                    TokenType::Identifier => {
+                        let field_name = consume_token(tokens, TokenType::Identifier)?;
+                        expr = Expression::FieldAccess {
+                            object: Box::new(expr),
+                            field: field_name.lexeme,
+                            inferred_type: None,
+                        }
+                    }
+                    _ => {
+                        return Err(ParserError::UnexpectedTokenNoExpected(next_token.clone()));
                     }
                 }
             }
